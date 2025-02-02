@@ -1,0 +1,278 @@
+D* LITE PATHFINDING PROJECT - COMPLETE DOCUMENTATION
+=================================================
+
+1. PROJECT OVERVIEW
+------------------
+The D* Lite pathfinding project implements a dynamic pathfinding algorithm for a rover in a grid-based environment. The system allows real-time obstacle placement and goal modification while continuously calculating the optimal path.
+
+2. FILE STRUCTURE
+----------------
+project/
+├── main.py           # Entry point and main loop
+├── gui.py            # Visualization and user interface
+├── d_star_lite.py    # Core pathfinding algorithm
+├── grid.py           # Grid map management
+├── priority_queue.py # Priority queue data structure
+└── utils.py          # Utility functions
+
+3. CORE COMPONENTS
+-----------------
+
+3.1 Priority Queue Implementation (priority_queue.py):
+
+```python
+class Priority:
+    def __init__(self, k1: float, k2: float):
+        self.k1 = k1
+        self.k2 = k2
+    
+    def __lt__(self, other):
+        return self.k1 < other.k1 or (self.k1 == other.k1 and self.k2 < other.k2)
+
+class PriorityQueue:
+    def __init__(self):
+        self.heap = []
+        self.vertices_in_heap = set()
+    
+    def insert(self, vertex, priority):
+        if vertex in self.vertices_in_heap:
+            self.update(vertex, priority)
+            return
+        self.heap.append((priority, vertex))
+        self.vertices_in_heap.add(vertex)
+        self._sift_up(len(self.heap) - 1)
+
+    def remove(self, vertex):
+        for i, (_, v) in enumerate(self.heap):
+            if v == vertex:
+                self.vertices_in_heap.remove(vertex)
+                if i < len(self.heap) - 1:
+                    self.heap[i] = self.heap[-1]
+                    self.heap.pop()
+                    self._sift_down(i)
+                else:
+                    self.heap.pop()
+
+3.2 Grid System Implementation (grid.py):
+
+class OccupancyGridMap:
+    def __init__(self, x_dim: int, y_dim: int, exploration_setting: str = '8N'):
+        self.x_dim = x_dim
+        self.y_dim = y_dim
+        self.exploration_setting = exploration_setting
+        self.occupancy_grid_map = np.zeros((x_dim, y_dim), dtype=np.uint8)
+        self.obstacle_threshold = 0.7
+
+    def is_valid_move(self, current: Tuple[int, int], next_pos: Tuple[int, int], 
+                     avoid_obstacles: bool) -> bool:
+        if not self.in_bounds(next_pos):
+            return False
+            
+        if avoid_obstacles and not self.is_unoccupied(next_pos):
+            return False
+            
+        if abs(current[0] - next_pos[0]) == 1 and abs(current[1] - next_pos[1]) == 1:
+            if not self.is_unoccupied((current[0], next_pos[1])) and \
+               not self.is_unoccupied((next_pos[0], current[1])):
+                return False
+                
+        return True
+
+    def get_neighbors(self, pos: Tuple[int, int], avoid_obstacles: bool = True) -> List[Tuple[int, int]]:
+        x, y = pos
+        neighbors = []
+        movements = [
+            (x-1, y), (x+1, y), (x, y-1), (x, y+1),
+            (x-1, y-1), (x-1, y+1), (x+1, y-1), (x+1, y+1)
+        ]
+        
+        for next_pos in movements:
+            if self.is_valid_move(pos, next_pos, avoid_obstacles):
+                neighbors.append(next_pos)
+                
+        return neighbors
+3.3 D* Lite Algorithm Implementation (d_star_lite.py):
+
+class DStarLite:
+    def __init__(self, map, s_start: Tuple[int, int], s_goal: Tuple[int, int]):
+        self.map = map
+        self.s_start = s_start
+        self.s_goal = s_goal
+        self.s_last = s_start
+        self.k_m = 0
+        self.queue = PriorityQueue()
+        self.rhs = np.full((map.x_dim, map.y_dim), np.inf)
+        self.g = np.full((map.x_dim, map.y_dim), np.inf)
+        self.rhs[s_goal] = 0
+        self.queue.insert(s_goal, self._calculate_key(s_goal))
+
+    def _compute_cost(self, u: Tuple[int, int], v: Tuple[int, int]) -> float:
+        if not self.map.is_valid_move(u, v, True):
+            return float('inf')
+            
+        obstacle_cost = 0
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                check_pos = (v[0] + dx, v[1] + dy)
+                if self.map.in_bounds(check_pos) and self.map.is_obstacle(check_pos):
+                    obstacle_cost += 2.0
+
+        base_cost = 1.414 if (abs(u[0] - v[0]) == 1 and abs(u[1] - v[1]) == 1) else 1.0
+        return base_cost + obstacle_cost
+
+    def compute_shortest_path(self):
+        while (self.queue and 
+              (self.queue.top_key() < self._calculate_key(self.s_start) or 
+               self.rhs[self.s_start] != self.g[self.s_start])):
+            
+            k_old = self.queue.top_key()
+            u = self.queue.pop()
+            
+            if k_old < self._calculate_key(u):
+                self.queue.insert(u, self._calculate_key(u))
+            elif self.g[u] > self.rhs[u]:
+                self.g[u] = self.rhs[u]
+                for s in self.map.get_neighbors(u):
+                    self._update_vertex(s)
+            else:
+                self.g[u] = float('inf')
+                for s in self.map.get_neighbors(u) + [u]:
+                    self._update_vertex(s)
+
+3.4 GUI Implementation (gui.py)
+class Animation:
+    def __init__(self, title: str, width: int, height: int, margin: int,
+                 x_dim: int, y_dim: int, start: Tuple[int, int],
+                 goal: Tuple[int, int], viewing_range: int):
+        pygame.init()
+        pygame.display.set_caption(title)
+        
+        self.world = OccupancyGridMap(x_dim=x_dim, y_dim=y_dim)
+        self.width = width
+        self.height = height
+        self.margin = margin
+        self.x_dim = x_dim
+        self.y_dim = y_dim
+        self.start = start
+        self.current_pos = start
+        self.goal = goal
+        self.viewing_range = viewing_range
+        
+        window_size = [
+            (width + margin) * y_dim + margin,
+            (height + margin) * x_dim + margin
+        ]
+        self.screen = pygame.display.set_mode(window_size)
+        
+        self.font = pygame.font.SysFont('Arial', 16)
+        self.drawing_mode = None
+        self.last_pos = None
+        self.show_grid = True
+        self.show_cost = False
+        self.paused = True
+        self.step_mode = False
+        self.done = False
+        self.clock = pygame.time.Clock()
+        self.goal_selection_mode = False
+        
+        self.rover_radius = min(width, height) // 3
+        self.rover_color = BLUE
+        self.path_color = (0, 150, 255)
+
+    def render(self, path: Optional[List[Tuple[int, int]]] = None):
+        self.screen.fill(BLACK)
+        
+        # Draw grid cells
+        for row in range(self.x_dim):
+            for col in range(self.y_dim):
+                x = (self.margin + self.width) * col + self.margin
+                y = (self.margin + self.height) * row + self.margin
+                
+                if (row, col) == self.start:
+                    color = RED
+                elif (row, col) == self.goal:
+                    color = GREEN
+                elif self.world.is_obstacle((row, col)):
+                    color = GRAY
+                else:
+                    color = WHITE
+                    
+                pygame.draw.rect(self.screen, color,
+                               [x, y, self.width, self.height])
+        
+        # Draw path
+        if path:
+            for i in range(len(path) - 1):
+                start_pos = path[i]
+                end_pos = path[i + 1]
+                
+                start_x = (self.margin + self.width) * start_pos[1] + self.margin + self.width // 2
+                start_y = (self.margin + self.height) * start_pos[0] + self.margin + self.height // 2
+                end_x = (self.margin + self.width) * end_pos[1] + self.margin + self.width // 2
+                end_y = (self.margin + self.height) * end_pos[0] + self.margin + self.height // 2
+                
+                pygame.draw.line(self.screen, self.path_color, 
+                               (start_x, start_y), (end_x, end_y), 3)
+
+4. IMPLEMENTATION DETAILS
+__________________________
+
+4.1 Path Cost Calculation:
+
+The cost between two vertices is calculated as:
+Total Cost = Base Cost + Obstacle Cost
+
+where:
+
+- Base Cost = 1.0 for cardinal movements
+- Base Cost = √2 (≈1.414) for diagonal movements
+- Obstacle Cost = 2.0 × (number of adjacent obstacles)
+
+4.2 Path smoothing :
+	Algorithm Steps:
+
+	1. Initialize smoothed path
+	2. Apply gradient descent:
+
+		 Data term: Keep close to original path
+ 		Smoothing term: Minimize curvature
+
+
+
+	3. Continue until convergence
+	4. Return integer coordinates
+
+
+def smooth_path(path: List[Tuple[int, int]], weight_data: float = 0.5, 
+               weight_smooth: float = 0.1, tolerance: float = 0.000001) -> List[Tuple[int, int]]:
+    if len(path) <= 2:
+        return path
+        
+    newpath = [[x, y] for x, y in path]
+    change = tolerance
+    
+    while change >= tolerance:
+        change = 0.0
+        for i in range(1, len(path)-1):
+            for j in range(2):
+                old = newpath[i][j]
+                newpath[i][j] += weight_data * (path[i][j] - newpath[i][j])
+                newpath[i][j] += weight_smooth * (newpath[i-1][j] + newpath[i+1][j] - 2.0 * newpath[i][j])
+                change += abs(old - newpath[i][j])
+    
+    return [(int(x), int(y)) for x, y in newpath]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

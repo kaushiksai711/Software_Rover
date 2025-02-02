@@ -1,0 +1,182 @@
+D* Lite Implementation Improvements Documentation
+
+
+D* LITE PATHFINDING PROJECT WORKFLOW
+===================================
+
+ FILE STRUCTURE
+----------------
+- main.py: Entry point and main loop
+- gui.py: Visualization and user interface
+- d_star_lite.py: Core pathfinding algorithm
+- grid.py: Grid map management
+- priority_queue.py: Priority queue data structure
+- utils.py: Utility functions
+
+ALGORITHM WORKFLOW
+==================
+
+Initialization:
+
+1. Create occupancy grid
+2. Set start and goal positions
+3. Initialize D* Lite algorithm
+4. Setup visualization
+
+
+Main Loop:
+
+while running:
+    # Handle events
+    if gui.handle_events():
+        running = False
+        continue
+        
+    # Check for changes
+    current_world_state = gui.world.occupancy_grid_map.tobytes()
+    goal_changed = last_goal != gui.goal
+    world_changed = (last_world_state is not None and 
+                    current_world_state != last_world_state)
+    
+    # Update path if needed
+    if not gui.paused or goal_changed or world_changed:
+        new_path, g, rhs = dstar.move_and_replan(gui.current_pos)
+        
+        if new_path:
+            path = new_path
+            if gui.step_mode:
+                gui.paused = True
+        else:
+            print("No path found!")
+            gui.paused = True
+            
+    # Render
+    gui.render(path)
+    gui.clock.tick(60)
+
+
+Cost Function:
+===============
+def _compute_cost(self, u: Tuple[int, int], v: Tuple[int, int]) -> float:
+    """
+    Compute traversal cost between vertices:
+    - Base cost for movement
+    - Penalty for diagonal movement
+    - Additional cost for proximity to obstacles
+    """
+
+
+Path Planning:
+===============
+def move_and_replan(self, robot_position: Tuple[int, int]) -> Tuple[List[Tuple[int, int]], np.ndarray, np.ndarray]:
+    self.s_start = robot_position
+    self.compute_shortest_path()
+    path = self.get_path(robot_position)
+    
+    if not path:
+        return [], self.g, self.rhs
+        
+    smoothed_path = smooth_path(path)
+    return smoothed_path, self.g, self.rhs
+
+
+
+ ###1. Controls
+
+- 'T': Toggle goal selection mode
+- Space: Play/Pause pathfinding
+- 'G': Toggle grid lines
+- 'S': Toggle step mode
+- Left-click: Add obstacles
+- Right-click: Remove obstacles
+
+
+Red Square: Start position/Current rover position
+Green Square: Goal position
+Gray Squares: Obstacles
+Blue Line: Calculated path
+Light Blue Dots: Path waypoints
+
+
+### 2. Basic Operations
+
+. **Setting a New Goal**:
+
+1. Press 'T' to enter goal selection mode
+2. Click anywhere on the grid
+3. Path will automatically recalculate
+
+ **Adding Obstacles**:
+
+1. Left-click and drag to draw obstacles
+2. Path will update in real-time
+3. Release mouse button when done
+
+**Removing Obstacles**:
+
+- Right-click and drag to erase obstacles
+- Path will update in real-time
+- Release mouse button when done
+
+
+
+
+The core path finding logic is implemented in the compute_shortest_path() method:
+
+def compute_shortest_path(self) -> None:
+    """
+    Compute shortest path with improved termination condition
+    """
+    while (self.queue and 
+          (self.queue.top_key() < self._calculate_key(self.s_start) or 
+           self.rhs[self.s_start] != self.g[self.s_start])):
+        
+        k_old = self.queue.top_key()
+        u = self.queue.pop()
+        
+        if k_old < self._calculate_key(u):
+            self.queue.insert(u, self._calculate_key(u))
+        elif self.g[u] > self.rhs[u]:
+            self.g[u] = self.rhs[u]
+            for s in self.map.get_neighbors(u):
+                self._update_vertex(s)
+        else:
+            self.g[u] = float('inf')
+            for s in self.map.get_neighbors(u) + [u]:
+                self._update_vertex(s)
+
+
+This method:
+
+1. Maintains a priority queue of vertices to explore
+2. Updates vertex costs based on changes
+3. Propagates changes to affected neighbors
+4. Continues until optimal path is found
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
