@@ -1,0 +1,2 @@
+pip install rplidar-roboticia adafruit-circuitpython-motorkit adafruit-circuitpython-ina219 mpu6050-raspberrypi opencv-python
+pip install RPi.GPIO_mock RPi.GPIO
