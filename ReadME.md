@@ -2,6 +2,31 @@
 
 This project contains the software components for a rover, including system initialization, telemetry, movement, terrain mapping, object detection, path planning, and more.
 
+# Packages Installation
+
+Linux commands
+
+- Update package list and install Python 3 and pip:
+
+```
+sudo apt update
+sudo apt install python3 python3-pip -y
+```
+
+- Install required Python packages:
+```
+pip3 install rplidar mpu6050 adafruit-circuitpython-busdevice adafruit-circuitpython-ina219 adafruit-circuitpython-motor adafruit-circuitpython-motorkit opencv-python
+```
+- Install additional dependencies for OpenCV:
+```
+sudo apt install libopencv-dev python3-opencv -y
+```
+ 
+- Install additional dependencies for Adafruit libraries:
+
+```
+sudo apt install python3-smbus -y
+```
 ---
 
 ## **1️⃣ Initialization**
